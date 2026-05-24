@@ -882,9 +882,73 @@ jobs:
           path: target/${{ matrix.target }}/release/Glass-${{ matrix.arch }}-symbols.zip
           if-no-files-found: error
 
+  build-windows:
+    name: Build Windows (x86_64)
+    runs-on: windows-2022
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_BACKTRACE: "1"
+      CARGO_INCREMENTAL: "0"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          clean: false
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: release-x86_64-pc-windows-msvc
+
+      - name: Install CMake
+        run: choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System' -y
+
+      - name: Install MSVC Spectre libraries
+        shell: pwsh
+        run: |
+          $setup = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\setup.exe"
+          $installPath = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2022\Enterprise"
+          if (!(Test-Path $installPath)) {
+            $installPath = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2022\BuildTools"
+          }
+          & $setup modify `
+            --installPath $installPath `
+            --add Microsoft.VisualStudio.Component.VC.14.44.17.14.x86.x64.Spectre `
+            --quiet `
+            --norestart
+
+      - name: Build Glass (Windows)
+        shell: pwsh
+        run: |
+          $env:ZED_BUNDLE = "true"
+          cargo build --release --features mimalloc --package zed --package cli --target x86_64-pc-windows-msvc
+          cargo build --release --package remote_server --target x86_64-pc-windows-msvc
+          cargo build --release --package browser --bin glass_helper --target x86_64-pc-windows-msvc
+
+      - name: Stage CEF runtime
+        shell: pwsh
+        run: script/stage-windows-cef-runtime.ps1 -TargetDirectory target/x86_64-pc-windows-msvc/release
+
+      - name: Upload Glass exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: Glass-x86_64-windows
+          path: |
+            target/x86_64-pc-windows-msvc/release/zed.exe
+            target/x86_64-pc-windows-msvc/release/cli.exe
+            target/x86_64-pc-windows-msvc/release/glass_helper.exe
+            target/x86_64-pc-windows-msvc/release/cef_runtime/
+          if-no-files-found: error
+
   create-release:
     name: Create GitHub Release
-    needs: [build-macos]
+    needs: [build-macos, build-windows]
     runs-on: ubuntu-latest
     permissions:
       contents: write
