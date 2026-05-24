@@ -55,3 +55,6 @@ gpui = { workspace = true, features = ["test-support"] }
 core-video.workspace = true
 io-surface.workspace = true
 core-foundation.workspace = true
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows.workspace = true

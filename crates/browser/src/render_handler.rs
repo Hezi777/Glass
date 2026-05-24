@@ -26,6 +26,8 @@ pub struct RenderState {
     pub scale_factor: f32,
     #[cfg(target_os = "macos")]
     pub current_frame: Option<CVPixelBuffer>,
+    #[cfg(not(target_os = "macos"))]
+    pub current_frame: Option<Arc<(Vec<u8>, u32, u32)>>,
 }
 
 impl Default for RenderState {
@@ -36,6 +38,8 @@ impl Default for RenderState {
             scale_factor: 1.0,
             #[cfg(target_os = "macos")]
             current_frame: None,
+            #[cfg(not(target_os = "macos"))]
+            current_frame: None,
         }
     }
 }
@@ -43,22 +47,12 @@ impl Default for RenderState {
 #[derive(Clone)]
 pub struct OsrRenderHandler {
     state: Arc<Mutex<RenderState>>,
-    #[cfg(target_os = "macos")]
     sender: EventSender,
 }
 
 impl OsrRenderHandler {
     pub fn new(state: Arc<Mutex<RenderState>>, sender: EventSender) -> Self {
-        #[cfg(target_os = "macos")]
-        {
-            Self { state, sender }
-        }
-
-        #[cfg(not(target_os = "macos"))]
-        {
-            let _ = sender;
-            Self { state }
-        }
+        Self { state, sender }
     }
 }
 
@@ -166,14 +160,58 @@ wrap_render_handler! {
         fn on_paint(
             &self,
             _browser: Option<&mut Browser>,
-            _type_: PaintElementType,
+            type_: PaintElementType,
             _dirty_rects: Option<&[Rect]>,
-            _buffer: *const u8,
-            _width: ::std::os::raw::c_int,
-            _height: ::std::os::raw::c_int,
+            buffer: *const u8,
+            width: ::std::os::raw::c_int,
+            height: ::std::os::raw::c_int,
         ) {
-            // Fallback: should not be called when shared_texture_enabled is set.
-            log::warn!("[browser::render_handler] on_paint() called unexpectedly (shared_texture_enabled should prevent this)");
+            if type_ != PaintElementType::default() {
+                return;
+            }
+
+            #[cfg(not(target_os = "macos"))]
+            {
+                if buffer.is_null() {
+                    log::warn!("[browser::render_handler] on_paint() null buffer");
+                    return;
+                }
+
+                let Ok(width) = u32::try_from(width) else {
+                    log::warn!("[browser::render_handler] on_paint() invalid width");
+                    return;
+                };
+                let Ok(height) = u32::try_from(height) else {
+                    log::warn!("[browser::render_handler] on_paint() invalid height");
+                    return;
+                };
+                if width == 0 || height == 0 {
+                    log::warn!("[browser::render_handler] on_paint() empty frame");
+                    return;
+                }
+                let Some(len) = width
+                    .checked_mul(height)
+                    .and_then(|pixels| pixels.checked_mul(4))
+                    .map(|len| len as usize)
+                else {
+                    log::warn!("[browser::render_handler] on_paint() frame too large");
+                    return;
+                };
+
+                let mut bytes = unsafe { std::slice::from_raw_parts(buffer, len).to_vec() };
+                for pixel in bytes.chunks_exact_mut(4) {
+                    pixel.swap(0, 2);
+                }
+                let mut state = self.handler.state.lock();
+                state.current_frame = Some(Arc::new((bytes, width, height)));
+                let _ = self.handler.sender.send(BrowserEvent::FrameReady);
+            }
+
+            #[cfg(target_os = "macos")]
+            {
+                let _ = (buffer, width, height);
+                log::warn!("[browser::render_handler] on_paint() called unexpectedly (shared_texture_enabled should prevent this)");
+            }
         }
     }
 }

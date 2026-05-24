@@ -61,6 +61,20 @@ function Invoke-BuildCommand {
     }
 }
 
+function Require-SpectreLibraries {
+    $programFilesX86 = ${env:ProgramFiles(x86)}
+    $vcToolsVersionFile = Join-Path $programFilesX86 "Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\Microsoft.VCToolsVersion.default.txt"
+    if (-not (Test-Path $vcToolsVersionFile)) {
+        return
+    }
+
+    $vcToolsVersion = (Get-Content $vcToolsVersionFile -Raw).Trim()
+    $spectrePath = Join-Path $programFilesX86 "Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\$vcToolsVersion\lib\spectre\x64"
+    if (-not (Test-Path $spectrePath)) {
+        throw "Missing VS Spectre-mitigated libraries. Install the Visual Studio component 'Microsoft.VisualStudio.Component.VC.14.44.17.14.x86.x64.Spectre' and re-run this script."
+    }
+}
+
 $repoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $repoRoot
 
@@ -69,6 +83,7 @@ Add-ToPathIfPresent -PathEntry (Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Li
 Require-Command -Name cargo -Message "Cargo is required. Install rustup and the Rust toolchain first."
 Require-Command -Name cmake -Message "CMake is required. Install CMake and ensure it is on PATH."
 Ensure-Ninja
+Require-SpectreLibraries
 
 $script:UseLocalGpuiResolved = $false
 $defaultGpuiPath = Join-Path (Split-Path $repoRoot -Parent) "gpui"
@@ -83,6 +98,8 @@ Invoke-BuildCommand -Arguments @("build", "--package", "cli", "--bin", "cli")
 if ($Run) {
     Write-Host "Building Glass..."
     Invoke-BuildCommand -Arguments @("build", "-p", "zed")
+    Write-Host "Building CEF helper..."
+    Invoke-BuildCommand -Arguments @("build", "--package", "browser", "--bin", "glass_helper")
 
     $zedBinary = Join-Path $repoRoot "target\debug\zed.exe"
     if (-not (Test-Path $zedBinary)) {
@@ -102,6 +119,8 @@ if ($Run) {
 } else {
     Write-Host "Building Glass..."
     Invoke-BuildCommand -Arguments @("build", "-p", "zed")
+    Write-Host "Building CEF helper..."
+    Invoke-BuildCommand -Arguments @("build", "--package", "browser", "--bin", "glass_helper")
     Write-Host ""
     Write-Host "Environment is ready."
     if ($script:UseLocalGpuiResolved) {

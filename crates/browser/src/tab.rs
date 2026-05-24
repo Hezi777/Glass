@@ -84,7 +84,6 @@ pub(crate) enum TabEvent {
     LoadingStateChanged,
     PageChromeChanged,
     TextInputStateChanged(BrowserTextInputState),
-    #[cfg(target_os = "macos")]
     FrameReady,
     NavigateToUrl(String),
     OpenNewTab(String),
@@ -223,7 +222,6 @@ impl BrowserTab {
                 BrowserEvent::LoadingProgress(progress) => {
                     self.loading_progress = progress;
                 }
-                #[cfg(target_os = "macos")]
                 BrowserEvent::FrameReady => {
                     cx.emit(TabEvent::FrameReady);
                 }
@@ -284,7 +282,7 @@ impl BrowserTab {
 
         let window_info = cef::WindowInfo {
             windowless_rendering_enabled: 1,
-            shared_texture_enabled: 1,
+            shared_texture_enabled: if cfg!(target_os = "macos") { 1 } else { 0 },
             ..Default::default()
         };
 
@@ -675,6 +673,11 @@ impl BrowserTab {
         self.render_state.lock().current_frame.clone()
     }
 
+    #[cfg(not(target_os = "macos"))]
+    pub fn current_frame(&self) -> Option<std::sync::Arc<(Vec<u8>, u32, u32)>> {
+        self.render_state.lock().current_frame.clone()
+    }
+
     pub fn url(&self) -> &str {
         &self.url
     }
@@ -766,10 +769,7 @@ impl BrowserTab {
                 }
             }
         }
-        #[cfg(target_os = "macos")]
-        {
-            self.render_state.lock().current_frame = None;
-        }
+        self.render_state.lock().current_frame = None;
     }
 
     /// Access the CEF browser handle from the global registry.

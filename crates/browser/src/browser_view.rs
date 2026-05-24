@@ -36,7 +36,7 @@ use workspace::{
     Workspace,
     item::{Item, ItemEvent, TabTooltipContent, WorkspaceItemKind},
 };
-use workspace_modes::ModeNavigationEntry;
+use workspace_modes::{ModeId, ModeNavigationEntry, ModeViewRegistry};
 
 const MAX_CLOSED_TABS: usize = 20;
 
@@ -846,7 +846,6 @@ impl BrowserView {
         cx: &mut Context<Self>,
     ) {
         match event {
-            #[cfg(target_os = "macos")]
             TabEvent::FrameReady => {
                 cx.notify();
             }

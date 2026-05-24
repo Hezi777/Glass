@@ -366,7 +366,9 @@ impl BrowserView {
         #[cfg(target_os = "macos")]
         let has_frame = current_frame.is_some();
         #[cfg(not(target_os = "macos"))]
-        let has_frame = false;
+        let current_frame = self.active_tab().and_then(|t| t.read(cx).current_frame());
+        #[cfg(not(target_os = "macos"))]
+        let has_frame = current_frame.is_some();
 
         let this = cx.entity();
         let input_target = this.clone();
@@ -503,6 +505,25 @@ impl BrowserView {
         #[cfg(target_os = "macos")]
         let content = content.when_some(current_frame, |this, frame| {
             this.child(surface(frame).size_full().object_fit(ObjectFit::Fill))
+        });
+
+        #[cfg(not(target_os = "macos"))]
+        let content = content.when_some(current_frame, |this, frame| {
+            use gpui::{ImageSource, RenderImage};
+            use image::{Frame, ImageBuffer, Rgba};
+            let (bytes, w, h) = frame.as_ref();
+            let Some(buf) = ImageBuffer::<Rgba<u8>, Vec<u8>>::from_raw(*w, *h, bytes.clone())
+            else {
+                log::warn!("[browser::content] skipped invalid CEF frame dimensions");
+                return this;
+            };
+            let render_image = std::sync::Arc::new(RenderImage::new([Frame::new(buf)]));
+            this.child(
+                gpui::img(ImageSource::Render(render_image))
+                    .absolute()
+                    .size_full()
+                    .object_fit(ObjectFit::Fill),
+            )
         });
 
         content.into_any_element()

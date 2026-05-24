@@ -3,6 +3,40 @@
 //! This is the helper executable for CEF subprocesses (GPU, Renderer, Plugin, etc.)
 //! It must be bundled as separate .app bundles in Contents/Frameworks/
 
+#[cfg(target_os = "windows")]
+fn resolve_windows_cef_dir() -> std::path::PathBuf {
+    let cef_dir = match std::env::var("CEF_PATH") {
+        Ok(path) => std::path::PathBuf::from(path),
+        Err(_) => std::env::current_exe()
+            .ok()
+            .and_then(|path| path.parent().map(|parent| parent.join("cef_runtime")))
+            .unwrap_or_else(|| std::path::PathBuf::from("cef_runtime")),
+    };
+
+    if cef_dir.join("libcef.dll").exists() {
+        cef_dir
+    } else {
+        eprintln!("libcef.dll not found at {}", cef_dir.join("libcef.dll").display());
+        std::process::exit(1);
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn configure_windows_cef_dll_directory(cef_dir: &std::path::Path) {
+    use windows::Win32::System::LibraryLoader::SetDllDirectoryW;
+    use windows::core::HSTRING;
+
+    let Some(cef_dir) = cef_dir.to_str() else {
+        eprintln!("CEF runtime path is not valid UTF-8: {}", cef_dir.display());
+        std::process::exit(1);
+    };
+
+    if let Err(error) = unsafe { SetDllDirectoryW(&HSTRING::from(cef_dir)) } {
+        eprintln!("Failed to set CEF DLL directory: {error}");
+        std::process::exit(1);
+    }
+}
+
 fn main() {
     #[cfg(target_os = "macos")]
     {
@@ -86,9 +120,34 @@ fn main() {
         std::process::exit(1);
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
     {
-        eprintln!("Helper is only needed on macOS");
+        let cef_dir = resolve_windows_cef_dir();
+        configure_windows_cef_dll_directory(&cef_dir);
+
+        // Initialize CEF API
+        let _ = cef::api_hash(cef::sys::CEF_API_VERSION_LAST, 0);
+
+        let args = cef::args::Args::new();
+        let mut app = browser::build_cef_app();
+
+        let exit_code = cef::execute_process(
+            Some(args.as_main_args()),
+            Some(&mut app),
+            std::ptr::null_mut(),
+        );
+
+        if exit_code >= 0 {
+            std::process::exit(exit_code);
+        }
+
+        eprintln!("Helper was invoked as browser process - this shouldn't happen");
+        std::process::exit(1);
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        eprintln!("Helper is only needed on macOS and Windows");
         std::process::exit(1);
     }
 }

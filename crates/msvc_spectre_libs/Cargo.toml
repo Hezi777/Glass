@@ -1,0 +1,16 @@
+[package]
+name = "msvc_spectre_libs"
+version = "0.1.3"
+edition.workspace = true
+publish = false
+license = "MIT"
+
+[features]
+default = []
+error = []
+
+[build-dependencies]
+cc = "1"
+
+[lib]
+path = "src/msvc_spectre_libs.rs"

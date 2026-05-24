@@ -15,12 +15,11 @@ use cef::{
     wrap_browser_process_handler,
 };
 use parking_lot::Mutex;
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::Instant;
-
-#[cfg(target_os = "macos")]
-use std::path::PathBuf;
 
 use crate::page_chrome::PageChromeRenderProcessHandlerBuilder;
 
@@ -216,7 +215,7 @@ fn resolve_cef_dir_from_env() -> Option<PathBuf> {
 /// Load the CEF framework directly from a directory path (bypasses LibraryLoader
 /// which only supports bundle-relative paths).
 #[cfg(target_os = "macos")]
-fn load_cef_framework_from_dir(cef_dir: &std::path::Path) -> bool {
+fn load_cef_framework_from_dir(cef_dir: &Path) -> bool {
     let framework_path =
         cef_dir.join("Chromium Embedded Framework.framework/Chromium Embedded Framework");
     use std::os::unix::ffi::OsStrExt;
@@ -224,6 +223,41 @@ fn load_cef_framework_from_dir(cef_dir: &std::path::Path) -> bool {
         return false;
     };
     unsafe { cef::load_library(Some(&*path_cstr.as_ptr().cast())) == 1 }
+}
+
+#[cfg(target_os = "windows")]
+fn valid_windows_cef_dir(path: PathBuf) -> Option<PathBuf> {
+    if path.join("libcef.dll").exists() {
+        Some(path)
+    } else {
+        None
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn resolve_windows_cef_dir() -> Option<PathBuf> {
+    if let Ok(path) = std::env::var("CEF_PATH") {
+        if let Some(path) = valid_windows_cef_dir(PathBuf::from(path)) {
+            return Some(path);
+        }
+    }
+
+    let exe_dir = std::env::current_exe().ok()?.parent()?.to_path_buf();
+    valid_windows_cef_dir(exe_dir.join("cef_runtime"))
+        .or_else(|| valid_windows_cef_dir(exe_dir))
+}
+
+#[cfg(target_os = "windows")]
+fn configure_windows_cef_dll_directory(cef_dir: &Path) -> Result<()> {
+    use windows::Win32::System::LibraryLoader::SetDllDirectoryW;
+    use windows::core::HSTRING;
+
+    let cef_dir = cef_dir
+        .to_str()
+        .ok_or_else(|| anyhow!("CEF runtime path is not valid UTF-8: {}", cef_dir.display()))?;
+
+    unsafe { SetDllDirectoryW(&HSTRING::from(cef_dir)) }
+        .map_err(|error| anyhow!("Failed to set CEF DLL directory: {}", error))
 }
 
 // ── CefInstance ──────────────────────────────────────────────────────
@@ -289,6 +323,14 @@ impl CefInstance {
                     }
                 }
             }
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            let Some(cef_dir) = resolve_windows_cef_dir() else {
+                return Ok(());
+            };
+            configure_windows_cef_dll_directory(&cef_dir)?;
         }
 
         let _ = api_hash(sys::CEF_API_VERSION_LAST, 0);
@@ -360,11 +402,23 @@ impl CefInstance {
         // stable yet, and Google's sign-in endpoints reject unrecognized
         // browser versions with 400 errors on the browserinfo fingerprint
         // check. Using Chrome 145's stable UA keeps auth flows working.
-        settings.user_agent = cef::CefString::from(
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) \
-             AppleWebKit/537.36 (KHTML, like Gecko) \
-             Chrome/145.0.7632.75 Safari/537.36",
-        );
+        #[cfg(target_os = "macos")]
+        {
+            settings.user_agent = cef::CefString::from(
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) \
+                 AppleWebKit/537.36 (KHTML, like Gecko) \
+                 Chrome/145.0.7632.75 Safari/537.36",
+            );
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            settings.user_agent = cef::CefString::from(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) \
+                 AppleWebKit/537.36 (KHTML, like Gecko) \
+                 Chrome/145.0.7632.75 Safari/537.36",
+            );
+        }
 
         #[cfg(target_os = "macos")]
         {
@@ -414,6 +468,37 @@ impl CefInstance {
                             if let Some(dir_str) = exe_dir.to_str() {
                                 settings.main_bundle_path = cef::CefString::from(dir_str);
                             }
+                        }
+                    }
+                }
+            }
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            if let Some(cef_dir) = resolve_windows_cef_dir() {
+                if let Some(cef_dir_str) = cef_dir.to_str() {
+                    settings.resources_dir_path = cef::CefString::from(cef_dir_str);
+                }
+
+                let locales_dir = cef_dir.join("locales");
+                if let Some(locales_dir_str) = locales_dir.to_str() {
+                    settings.locales_dir_path = cef::CefString::from(locales_dir_str);
+                }
+
+                if let Ok(exe_path) = std::env::current_exe() {
+                    if let Some(exe_dir) = exe_path.parent() {
+                        let helper_path = exe_dir.join("glass_helper.exe");
+                        if helper_path.exists() {
+                            if let Some(helper_path_str) = helper_path.to_str() {
+                                settings.browser_subprocess_path =
+                                    cef::CefString::from(helper_path_str);
+                            }
+                        } else {
+                            log::warn!(
+                                "[browser::cef_instance] glass_helper.exe not found at {}",
+                                helper_path.display()
+                            );
                         }
                     }
                 }
