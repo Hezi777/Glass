@@ -14,11 +14,11 @@ env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: "1"
   CARGO_INCREMENTAL: "0"
-  CXXFLAGS: "-stdlib=libc++"
   RELEASE_VERSION: ${{ github.event.inputs.version || github.ref_name }}
 
 jobs:
-  build-macos:
+  build-macos-disabled:
+    if: false
     name: Build macOS (${{ matrix.target }})
     runs-on: ${{ matrix.runner }}
     strategy:
@@ -948,7 +948,7 @@ jobs:
 
   create-release:
     name: Create GitHub Release
-    needs: [build-macos, build-windows]
+    needs: [build-windows]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -980,17 +980,15 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            artifacts/Glass-aarch64.dmg/Glass-aarch64.dmg
-            artifacts/Glass-aarch64-symbols.zip/Glass-aarch64-symbols.zip
-            # Intel build disabled - uncomment when re-enabled:
-            # artifacts/Glass-x86_64.dmg/Glass-x86_64.dmg
+            artifacts/Glass-x86_64-windows/zed.exe
+            artifacts/Glass-x86_64-windows/cli.exe
+            artifacts/Glass-x86_64-windows/glass_helper.exe
           body: |
             ## Glass ${{ env.RELEASE_VERSION }}
 
             ### Installation
 
-            1. Download the DMG: `Glass-aarch64.dmg` (Apple Silicon Macs - M1/M2/M3/M4)
-            2. Open the DMG and drag Glass to Applications
-            3. Launch Glass from Applications
-
-            > **Note:** Only Apple Silicon builds are available at this time. Intel Mac support coming later.
+            1. Download `zed.exe`, `cli.exe`, and `glass_helper.exe`
+            2. Place all three files in the same folder
+            3. Download the `cef_runtime` folder from the artifact and place it next to the exes
+            4. Run `zed.exe`
