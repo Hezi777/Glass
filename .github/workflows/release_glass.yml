@@ -932,6 +932,10 @@ jobs:
         with:
           shared-key: release-x86_64-pc-windows-msvc
 
+      - name: Fetch Cargo dependencies
+        shell: pwsh
+        run: cargo fetch --target x86_64-pc-windows-msvc
+
       - name: Fix GPUI shader paths
         shell: pwsh
         run: |
