@@ -932,6 +932,20 @@ jobs:
         with:
           shared-key: release-x86_64-pc-windows-msvc
 
+      - name: Fix GPUI shader paths
+        shell: pwsh
+        run: |
+          # gpui/build.rs looks for shaders at src/platform/windows/ but in this
+          # version of GPUI they live in the gpui_windows crate. Copy them into place.
+          $gpuiBase = Get-ChildItem "$env:CARGO_HOME\git\checkouts\gpui-*" -Directory | Select-Object -First 1
+          $gpuiRev  = Get-ChildItem $gpuiBase.FullName -Directory | Select-Object -First 1
+          $dst = Join-Path $gpuiRev.FullName "crates\gpui\src\platform\windows"
+          $src = Join-Path $gpuiRev.FullName "crates\gpui_windows\src"
+          New-Item -ItemType Directory -Force -Path $dst | Out-Null
+          Copy-Item "$src\shaders.hlsl"           "$dst\shaders.hlsl"           -Force
+          Copy-Item "$src\color_text_raster.hlsl" "$dst\color_text_raster.hlsl" -Force
+          Write-Host "Copied GPUI shaders from gpui_windows to $dst"
+
       - name: Install CMake
         run: choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System' -y
 
