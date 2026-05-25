@@ -983,28 +983,20 @@ jobs:
         shell: pwsh
         run: script/stage-windows-cef-runtime.ps1 -TargetDirectory target/x86_64-pc-windows-msvc/release
 
-      - name: Package Glass release zip
+      - name: Build MSI installer
         shell: pwsh
         run: |
-          $releaseDir = "target\x86_64-pc-windows-msvc\release"
-          $zipPath = "$releaseDir\Glass-x86_64-windows.zip"
-          $filesToInclude = @(
-            "zed.exe", "cli.exe", "glass_helper.exe",
-            "conpty.dll", "OpenConsole.exe",
-            "libcef.dll", "chrome_elf.dll",
-            "d3dcompiler_47.dll", "vk_swiftshader.dll", "vulkan-1.dll"
-          )
-          $extras = Get-ChildItem $releaseDir -File -Include "*.pak","*.dat","*.bin","*.json" -ErrorAction SilentlyContinue
-          $items = ($filesToInclude | ForEach-Object { Join-Path $releaseDir $_ } | Where-Object { Test-Path $_ }) + ($extras | Select-Object -ExpandProperty FullName)
-          $localesDir = Join-Path $releaseDir "locales"
-          Compress-Archive -Path ($items + @($localesDir)) -DestinationPath $zipPath -Force
-          Write-Host "Created $zipPath"
+          $version = "${{ env.RELEASE_VERSION }}" -replace '^v', ''
+          script/build-windows-installer.ps1 `
+            -ReleaseDir "target\x86_64-pc-windows-msvc\release" `
+            -Version "${{ env.RELEASE_VERSION }}" `
+            -OutPath "target\x86_64-pc-windows-msvc\release\Glass-$version-Setup.msi"
 
-      - name: Upload Glass zip artifact
+      - name: Upload MSI artifact
         uses: actions/upload-artifact@v4
         with:
           name: Glass-x86_64-windows
-          path: target/x86_64-pc-windows-msvc/release/Glass-x86_64-windows.zip
+          path: target/x86_64-pc-windows-msvc/release/Glass-*-Setup.msi
           if-no-files-found: error
 
   create-release:
@@ -1041,11 +1033,12 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            artifacts/Glass-x86_64-windows/Glass-x86_64-windows.zip
+            artifacts/Glass-x86_64-windows/Glass-*-Setup.msi
           body: |
             ## Glass ${{ env.RELEASE_VERSION }}
 
             ### Installation
 
-            1. Download `Glass-x86_64-windows.zip` and extract it to a folder
-            2. Run `zed.exe`
+            1. Download `Glass-${{ env.RELEASE_VERSION }}-Setup.msi`
+            2. Run it and follow the installer steps
+            3. Launch **Glass** from the Start Menu or Desktop shortcut
