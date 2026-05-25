@@ -991,6 +991,7 @@ jobs:
             target/x86_64-pc-windows-msvc/release/zed.exe
             target/x86_64-pc-windows-msvc/release/cli.exe
             target/x86_64-pc-windows-msvc/release/glass_helper.exe
+            target/x86_64-pc-windows-msvc/release/libcef.dll
             target/x86_64-pc-windows-msvc/release/cef_runtime/
             target/x86_64-pc-windows-msvc/release/conpty.dll
             target/x86_64-pc-windows-msvc/release/OpenConsole.exe
@@ -1038,6 +1039,7 @@ jobs:
             artifacts/Glass-x86_64-windows/zed.exe
             artifacts/Glass-x86_64-windows/cli.exe
             artifacts/Glass-x86_64-windows/glass_helper.exe
+            artifacts/Glass-x86_64-windows/libcef.dll
             artifacts/Glass-x86_64-windows/cef_runtime.zip
             artifacts/Glass-x86_64-windows/conpty.dll
             artifacts/Glass-x86_64-windows/OpenConsole.exe

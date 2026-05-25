@@ -65,4 +65,10 @@ if (-not $cefSource) {
 $cefRuntimeDirectory = Join-Path $targetDirectory "cef_runtime"
 Sync-CefRuntimeContents -SourceDirectory $cefSource -DestinationDirectory $cefRuntimeDirectory
 
+# libcef.dll must also sit next to the exe so the Windows loader can find it
+# before the process starts (it's a static PE import, not a LoadLibrary call).
+$libcefSrc = Join-Path $cefRuntimeDirectory "libcef.dll"
+$libcefDst = Join-Path $targetDirectory "libcef.dll"
+Copy-Item -LiteralPath $libcefSrc -Destination $libcefDst -Force
+
 Write-Output $cefRuntimeDirectory
