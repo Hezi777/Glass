@@ -1022,6 +1022,11 @@ jobs:
       - name: List artifacts
         run: ls -lR artifacts
 
+      - name: Package CEF runtime
+        run: |
+          cd artifacts/Glass-x86_64-windows
+          zip -r cef_runtime.zip cef_runtime/
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
@@ -1033,12 +1038,14 @@ jobs:
             artifacts/Glass-x86_64-windows/zed.exe
             artifacts/Glass-x86_64-windows/cli.exe
             artifacts/Glass-x86_64-windows/glass_helper.exe
+            artifacts/Glass-x86_64-windows/cef_runtime.zip
+            artifacts/Glass-x86_64-windows/conpty.dll
+            artifacts/Glass-x86_64-windows/OpenConsole.exe
           body: |
             ## Glass ${{ env.RELEASE_VERSION }}
 
             ### Installation
 
-            1. Download `zed.exe`, `cli.exe`, and `glass_helper.exe`
-            2. Place all three files in the same folder
-            3. Download the `cef_runtime` folder from the artifact and place it next to the exes
-            4. Run `zed.exe`
+            1. Download all files into the same folder
+            2. Unzip `cef_runtime.zip` so there is a `cef_runtime/` folder next to `zed.exe`
+            3. Run `zed.exe`
