@@ -946,8 +946,7 @@ jobs:
           $dst = Join-Path $gpuiRev.FullName "crates\gpui\src\platform\windows"
           $src = Join-Path $gpuiRev.FullName "crates\gpui_windows\src"
           New-Item -ItemType Directory -Force -Path $dst | Out-Null
-          Copy-Item "$src\shaders.hlsl"           "$dst\shaders.hlsl"           -Force
-          Copy-Item "$src\color_text_raster.hlsl" "$dst\color_text_raster.hlsl" -Force
+          Copy-Item "$src\*.hlsl" "$dst\" -Force
           Write-Host "Copied GPUI shaders from gpui_windows to $dst"
 
       - name: Install CMake
