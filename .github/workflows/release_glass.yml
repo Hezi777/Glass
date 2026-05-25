@@ -942,9 +942,13 @@ jobs:
           # gpui/build.rs looks for shaders at src/platform/windows/ but in this
           # version of GPUI they live in the gpui_windows crate. Copy them into place.
           $gpuiBase = Get-ChildItem "$env:CARGO_HOME\git\checkouts\gpui-*" -Directory | Select-Object -First 1
-          $gpuiRev  = Get-ChildItem $gpuiBase.FullName -Directory | Select-Object -First 1
+          if (-not $gpuiBase) { throw "GPUI git checkout not found under $env:CARGO_HOME\git\checkouts" }
+          # Sort by LastWriteTime descending to pick the most recently fetched revision.
+          $gpuiRev = Get-ChildItem $gpuiBase.FullName -Directory | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (-not $gpuiRev) { throw "No revision directory found under $($gpuiBase.FullName)" }
           $dst = Join-Path $gpuiRev.FullName "crates\gpui\src\platform\windows"
           $src = Join-Path $gpuiRev.FullName "crates\gpui_windows\src"
+          if (-not (Test-Path $src)) { throw "gpui_windows/src not found at $src" }
           New-Item -ItemType Directory -Force -Path $dst | Out-Null
           Copy-Item "$src\*.hlsl" "$dst\" -Force
           Write-Host "Copied GPUI shaders from gpui_windows to $dst"
@@ -988,6 +992,8 @@ jobs:
             target/x86_64-pc-windows-msvc/release/cli.exe
             target/x86_64-pc-windows-msvc/release/glass_helper.exe
             target/x86_64-pc-windows-msvc/release/cef_runtime/
+            target/x86_64-pc-windows-msvc/release/conpty.dll
+            target/x86_64-pc-windows-msvc/release/OpenConsole.exe
           if-no-files-found: error
 
   create-release:
