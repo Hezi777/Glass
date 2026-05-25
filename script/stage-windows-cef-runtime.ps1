@@ -34,9 +34,6 @@ function Sync-CefRuntimeContents {
         [string]$DestinationDirectory
     )
 
-    if (Test-Path $DestinationDirectory) {
-        Remove-Item -LiteralPath $DestinationDirectory -Recurse -Force
-    }
     New-Item -ItemType Directory -Path $DestinationDirectory -Force | Out-Null
 
     $directoriesToCopy = @("locales")
@@ -62,13 +59,10 @@ if (-not $cefSource) {
     throw "Unable to locate built CEF runtime under '$targetDirectory\build'."
 }
 
-$cefRuntimeDirectory = Join-Path $targetDirectory "cef_runtime"
-Sync-CefRuntimeContents -SourceDirectory $cefSource -DestinationDirectory $cefRuntimeDirectory
+# CEF DLLs must be in the same directory as the exe — the Windows loader resolves
+# static PE imports before any code runs, so subdirectories are never searched.
+# Resources (pak, locales, etc.) also go flat here; resolve_windows_cef_dir()
+# falls back to exe_dir when no cef_runtime/ subfolder is present.
+Sync-CefRuntimeContents -SourceDirectory $cefSource -DestinationDirectory $targetDirectory
 
-# libcef.dll must also sit next to the exe so the Windows loader can find it
-# before the process starts (it's a static PE import, not a LoadLibrary call).
-$libcefSrc = Join-Path $cefRuntimeDirectory "libcef.dll"
-$libcefDst = Join-Path $targetDirectory "libcef.dll"
-Copy-Item -LiteralPath $libcefSrc -Destination $libcefDst -Force
-
-Write-Output $cefRuntimeDirectory
+Write-Output $targetDirectory

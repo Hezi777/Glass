@@ -983,18 +983,28 @@ jobs:
         shell: pwsh
         run: script/stage-windows-cef-runtime.ps1 -TargetDirectory target/x86_64-pc-windows-msvc/release
 
-      - name: Upload Glass exe
+      - name: Package Glass release zip
+        shell: pwsh
+        run: |
+          $releaseDir = "target\x86_64-pc-windows-msvc\release"
+          $zipPath = "$releaseDir\Glass-x86_64-windows.zip"
+          $filesToInclude = @(
+            "zed.exe", "cli.exe", "glass_helper.exe",
+            "conpty.dll", "OpenConsole.exe",
+            "libcef.dll", "chrome_elf.dll",
+            "d3dcompiler_47.dll", "vk_swiftshader.dll", "vulkan-1.dll"
+          )
+          $extras = Get-ChildItem $releaseDir -File -Include "*.pak","*.dat","*.bin","*.json" -ErrorAction SilentlyContinue
+          $items = ($filesToInclude | ForEach-Object { Join-Path $releaseDir $_ } | Where-Object { Test-Path $_ }) + ($extras | Select-Object -ExpandProperty FullName)
+          $localesDir = Join-Path $releaseDir "locales"
+          Compress-Archive -Path ($items + @($localesDir)) -DestinationPath $zipPath -Force
+          Write-Host "Created $zipPath"
+
+      - name: Upload Glass zip artifact
         uses: actions/upload-artifact@v4
         with:
           name: Glass-x86_64-windows
-          path: |
-            target/x86_64-pc-windows-msvc/release/zed.exe
-            target/x86_64-pc-windows-msvc/release/cli.exe
-            target/x86_64-pc-windows-msvc/release/glass_helper.exe
-            target/x86_64-pc-windows-msvc/release/libcef.dll
-            target/x86_64-pc-windows-msvc/release/cef_runtime/
-            target/x86_64-pc-windows-msvc/release/conpty.dll
-            target/x86_64-pc-windows-msvc/release/OpenConsole.exe
+          path: target/x86_64-pc-windows-msvc/release/Glass-x86_64-windows.zip
           if-no-files-found: error
 
   create-release:
@@ -1023,11 +1033,6 @@ jobs:
       - name: List artifacts
         run: ls -lR artifacts
 
-      - name: Package CEF runtime
-        run: |
-          cd artifacts/Glass-x86_64-windows
-          zip -r cef_runtime.zip cef_runtime/
-
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
@@ -1036,18 +1041,11 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            artifacts/Glass-x86_64-windows/zed.exe
-            artifacts/Glass-x86_64-windows/cli.exe
-            artifacts/Glass-x86_64-windows/glass_helper.exe
-            artifacts/Glass-x86_64-windows/libcef.dll
-            artifacts/Glass-x86_64-windows/cef_runtime.zip
-            artifacts/Glass-x86_64-windows/conpty.dll
-            artifacts/Glass-x86_64-windows/OpenConsole.exe
+            artifacts/Glass-x86_64-windows/Glass-x86_64-windows.zip
           body: |
             ## Glass ${{ env.RELEASE_VERSION }}
 
             ### Installation
 
-            1. Download all files into the same folder
-            2. Unzip `cef_runtime.zip` so there is a `cef_runtime/` folder next to `zed.exe`
-            3. Run `zed.exe`
+            1. Download `Glass-x86_64-windows.zip` and extract it to a folder
+            2. Run `zed.exe`
