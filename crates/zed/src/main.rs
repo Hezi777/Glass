@@ -265,7 +265,13 @@ fn main() {
     }
 
     #[cfg(target_os = "windows")]
-    match util::get_zed_cli_path() {
+    match std::env::current_exe()
+        .map_err(anyhow::Error::from)
+        .and_then(|exe| {
+            exe.parent()
+                .map(|p| p.join("cli.exe"))
+                .ok_or_else(|| anyhow::anyhow!("could not determine parent directory of zed.exe"))
+        }) {
         Ok(path) => askpass::set_askpass_program(path),
         Err(err) => {
             eprintln!("Error: {}", err);
