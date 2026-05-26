@@ -5,20 +5,33 @@
 
 #[cfg(target_os = "windows")]
 fn resolve_windows_cef_dir() -> std::path::PathBuf {
-    let cef_dir = match std::env::var("CEF_PATH") {
-        Ok(path) => std::path::PathBuf::from(path),
-        Err(_) => std::env::current_exe()
-            .ok()
-            .and_then(|path| path.parent().map(|parent| parent.join("cef_runtime")))
-            .unwrap_or_else(|| std::path::PathBuf::from("cef_runtime")),
-    };
-
-    if cef_dir.join("libcef.dll").exists() {
-        cef_dir
-    } else {
-        eprintln!("libcef.dll not found at {}", cef_dir.join("libcef.dll").display());
-        std::process::exit(1);
+    if let Ok(path) = std::env::var("CEF_PATH") {
+        let path = std::path::PathBuf::from(path);
+        if path.join("libcef.dll").exists() {
+            return path;
+        }
     }
+
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|path| path.parent().map(|p| p.to_path_buf()))
+        .unwrap_or_else(|| std::path::PathBuf::from("."));
+
+    // Check cef_runtime/ subdirectory first (legacy layout), then flat (current layout).
+    let cef_runtime_dir = exe_dir.join("cef_runtime");
+    if cef_runtime_dir.join("libcef.dll").exists() {
+        return cef_runtime_dir;
+    }
+    if exe_dir.join("libcef.dll").exists() {
+        return exe_dir;
+    }
+
+    eprintln!(
+        "libcef.dll not found at {} or {}",
+        cef_runtime_dir.join("libcef.dll").display(),
+        exe_dir.join("libcef.dll").display(),
+    );
+    std::process::exit(1);
 }
 
 #[cfg(target_os = "windows")]
