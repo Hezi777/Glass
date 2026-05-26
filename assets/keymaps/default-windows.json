@@ -902,7 +902,7 @@
     "bindings": {
       "left": "outline_panel::CollapseSelectedEntry",
       "right": "outline_panel::ExpandSelectedEntry",
-      "shift-alt-c": "outline_panel::CopyPath",
+      "shift-alt-c": "workspace::CopyPath",
       "ctrl-shift-alt-c": "workspace::CopyRelativePath",
       "ctrl-alt-r": "outline_panel::RevealInFileManager",
       "space": "outline_panel::OpenSelectedEntry",
