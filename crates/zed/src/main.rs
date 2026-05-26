@@ -320,7 +320,7 @@ fn main() {
         .stack_size(10 * 1024 * 1024)
         .thread_name(|ix| format!("RayonWorker{}", ix))
         .build_global()
-        .unwrap();
+        .log_err();
 
     log::info!(
         "========== starting zed version {}, sha {} ==========",
@@ -1726,7 +1726,13 @@ fn parse_url_arg(arg: &str, cx: &App) -> String {
 
 fn load_embedded_fonts(cx: &App) {
     let asset_source = cx.asset_source();
-    let font_paths = asset_source.list("fonts").unwrap();
+    let font_paths = match asset_source.list("fonts") {
+        Ok(paths) => paths,
+        Err(e) => {
+            log::error!("Failed to list font assets: {e:#}");
+            return;
+        }
+    };
     let embedded_fonts = Mutex::new(Vec::new());
     let executor = cx.background_executor();
 
@@ -1737,15 +1743,18 @@ fn load_embedded_fonts(cx: &App) {
             }
 
             scope.spawn(async {
-                let font_bytes = asset_source.load(font_path).unwrap().unwrap();
-                embedded_fonts.lock().push(font_bytes);
+                match asset_source.load(font_path) {
+                    Ok(Some(font_bytes)) => embedded_fonts.lock().push(font_bytes),
+                    Ok(None) => log::warn!("Font asset not found: {font_path}"),
+                    Err(e) => log::error!("Failed to load font {font_path}: {e:#}"),
+                }
             });
         }
     }));
 
     cx.text_system()
         .add_fonts(embedded_fonts.into_inner())
-        .unwrap();
+        .log_err();
 }
 
 /// Spawns a background task to load the user themes from the themes directory.

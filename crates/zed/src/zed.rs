@@ -1961,16 +1961,31 @@ pub fn load_default_keymap(cx: &mut App) {
     }
 
     cx.bind_keys(
-        KeymapFile::load_asset(DEFAULT_KEYMAP_PATH, Some(KeybindSource::Default), cx).unwrap(),
+        KeymapFile::load_asset(DEFAULT_KEYMAP_PATH, Some(KeybindSource::Default), cx)
+            .unwrap_or_else(|e| {
+                log::error!("Failed to load built-in keymap {DEFAULT_KEYMAP_PATH}: {e:#}");
+                vec![]
+            }),
     );
 
     if let Some(asset_path) = base_keymap.asset_path() {
-        cx.bind_keys(KeymapFile::load_asset(asset_path, Some(KeybindSource::Base), cx).unwrap());
+        cx.bind_keys(
+            KeymapFile::load_asset(asset_path, Some(KeybindSource::Base), cx).unwrap_or_else(
+                |e| {
+                    log::error!("Failed to load built-in keymap {asset_path}: {e:#}");
+                    vec![]
+                },
+            ),
+        );
     }
 
     if VimModeSetting::get_global(cx).0 || vim_mode_setting::HelixModeSetting::get_global(cx).0 {
         cx.bind_keys(
-            KeymapFile::load_asset(VIM_KEYMAP_PATH, Some(KeybindSource::Vim), cx).unwrap(),
+            KeymapFile::load_asset(VIM_KEYMAP_PATH, Some(KeybindSource::Vim), cx)
+                .unwrap_or_else(|e| {
+                    log::error!("Failed to load built-in keymap {VIM_KEYMAP_PATH}: {e:#}");
+                    vec![]
+                }),
         );
     }
 }

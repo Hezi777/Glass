@@ -55,7 +55,7 @@ foreach ($name in $knownExes) {
 
 # CEF runtime files
 Get-ChildItem $releaseDir -File |
-    Where-Object { $_.Extension -in @('.dll', '.pak', '.dat', '.bin') -and $_.Name -ne 'archive.json' } |
+    Where-Object { $_.Extension -in @('.dll', '.pak', '.dat', '.bin', '.json') -and $_.Name -ne 'archive.json' } |
     ForEach-Object { Copy-Item $_.FullName (Join-Path $stageDir $_.Name) -Force }
 
 # Locales

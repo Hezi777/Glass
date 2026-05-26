@@ -27,15 +27,20 @@ use crate::{Args, OpenListener, RawOpenRequest};
 
 #[inline]
 fn is_first_instance() -> bool {
-    unsafe {
+    let result = unsafe {
         CreateMutexW(
             None,
             false,
             &HSTRING::from(format!("{}-Instance-Mutex", app_identifier())),
         )
-        .expect("Unable to create instance mutex.")
     };
-    unsafe { GetLastError() != ERROR_ALREADY_EXISTS }
+    match result {
+        Ok(_) => unsafe { GetLastError() != ERROR_ALREADY_EXISTS },
+        Err(e) => {
+            log::error!("Failed to create instance mutex: {e}");
+            true
+        }
+    }
 }
 
 pub fn handle_single_instance(opener: OpenListener, args: &Args) -> bool {
@@ -52,7 +57,7 @@ pub fn handle_single_instance(opener: OpenListener, args: &Args) -> bool {
                     })
                 })
             })
-            .unwrap();
+            .log_err();
     } else if !args.foreground {
         // We are not the first instance, send args to the first instance
         send_args_to_instance(args).log_err();
@@ -68,8 +73,8 @@ fn with_pipe(f: &dyn Fn(String)) {
             PIPE_ACCESS_INBOUND,
             PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
             1,
-            128,
-            128,
+            4096,
+            4096,
             0,
             None,
         )
@@ -99,7 +104,7 @@ fn retrieve_message_from_pipe(pipe: HANDLE) -> anyhow::Result<String> {
 }
 
 fn retrieve_message_from_pipe_inner(pipe: HANDLE) -> anyhow::Result<String> {
-    let mut buffer = [0u8; 128];
+    let mut buffer = [0u8; 4096];
     unsafe {
         ReadFile(pipe, Some(&mut buffer), None, None)?;
     }
@@ -167,7 +172,7 @@ fn send_args_to_instance(args: &Args) -> anyhow::Result<()> {
     };
 
     let exit_status = Arc::new(Mutex::new(None));
-    let sender: JoinHandle<anyhow::Result<()>> = std::thread::Builder::new()
+    let sender = std::thread::Builder::new()
         .name("CliReceiver".to_owned())
         .spawn({
             let exit_status = exit_status.clone();
@@ -191,10 +196,12 @@ fn send_args_to_instance(args: &Args) -> anyhow::Result<()> {
                 Ok(())
             }
         })
-        .unwrap();
+        .log_err();
 
     write_message_to_instance_pipe(url.as_bytes())?;
-    sender.join().unwrap()?;
+    if let Some(sender) = sender {
+        sender.join().unwrap_or_else(|_| Ok(()))?;
+    }
     if let Some(exit_status) = exit_status.lock().take() {
         std::process::exit(exit_status);
     }
