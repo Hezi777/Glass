@@ -64,6 +64,52 @@ if (Test-Path "$releaseDir\locales") {
         ForEach-Object { Copy-Item $_.FullName (Join-Path $stageDir "locales\$($_.Name)") -Force }
 }
 
+# MSVC runtime DLLs — required at runtime but not produced by the Rust build,
+# so they must be staged explicitly.  We look in VCToolsRedistDir first (set by
+# a VS Developer shell / vcvars64.bat), then fall back to System32.
+$msvcDlls = @(
+    "vcruntime140.dll",
+    "vcruntime140_1.dll",
+    "msvcp140.dll",
+    "ucrtbase.dll"
+)
+
+# Build an ordered list of candidate directories.
+$msvcSearchDirs = [System.Collections.Generic.List[string]]::new()
+
+if ($env:VCToolsRedistDir) {
+    # VCToolsRedistDir may have a trailing backslash; normalise it.
+    $redistBase = $env:VCToolsRedistDir.TrimEnd('\', '/')
+    # x64 CRT DLLs live under <redist>\x64\Microsoft.VC*.CRT\
+    $crtSubDir = Get-ChildItem (Join-Path $redistBase "x64") -Directory -Filter "Microsoft.VC*.CRT" -ErrorAction SilentlyContinue |
+        Sort-Object Name -Descending |
+        Select-Object -First 1 -ExpandProperty FullName
+    if ($crtSubDir) { $msvcSearchDirs.Add($crtSubDir) }
+    # Also try the flat x64 subdirectory as a secondary candidate.
+    $msvcSearchDirs.Add((Join-Path $redistBase "x64"))
+}
+
+# System32 ships ucrtbase.dll and hosts the VC runtime DLLs when the
+# Visual C++ Redistributable is already installed on the machine.
+$msvcSearchDirs.Add("$env:SystemRoot\System32")
+
+Write-Host "Staging MSVC runtime DLLs..."
+foreach ($dll in $msvcDlls) {
+    $copied = $false
+    foreach ($dir in $msvcSearchDirs) {
+        $src = Join-Path $dir $dll
+        if (Test-Path $src) {
+            Copy-Item $src (Join-Path $stageDir $dll) -Force
+            Write-Host "  Copied $dll from $dir"
+            $copied = $true
+            break
+        }
+    }
+    if (-not $copied) {
+        Write-Warning "  $dll not found in any search path — it will be missing from the installer."
+    }
+}
+
 Write-Host "Staged $(( Get-ChildItem $stageDir -Recurse -File ).Count) files"
 
 # Work directory for WiX intermediates
@@ -140,7 +186,7 @@ $productWxs = Join-Path $workDir "Product.wxs"
                   Icon="GlassIcon.ico"
                   Directory="DesktopFolder" />
         <RemoveFolder Id="RemoveGlassMenuDir" Directory="GlassMenuDir" On="uninstall" />
-        <RegistryValue Root="HKCU"
+        <RegistryValue Root="HKLM"
                        Key="Software\Glass"
                        Name="installed"
                        Type="integer"
@@ -149,9 +195,16 @@ $productWxs = Join-Path $workDir "Product.wxs"
       </Component>
     </DirectoryRef>
 
+    <DirectoryRef Id="INSTALLFOLDER">
+      <Component Id="EnvironmentPath" Guid="*" Win64="yes">
+        <Environment Id="PATH" Name="PATH" Value="[INSTALLFOLDER]" Permanent="no" Part="last" Action="set" System="yes" />
+      </Component>
+    </DirectoryRef>
+
     <Feature Id="MainFeature" Title="Glass" Level="1">
       <ComponentGroupRef Id="AppFiles" />
       <ComponentRef Id="ShortcutComp" />
+      <ComponentRef Id="EnvironmentPath" />
     </Feature>
 
   </Product>
@@ -187,5 +240,20 @@ New-Item -ItemType Directory -Force -Path (Split-Path $OutPath) | Out-Null
     -ext WixUIExtension `
     -out "$OutPath"
 if ($LASTEXITCODE -ne 0) { throw "light.exe failed ($LASTEXITCODE)" }
+
+# Code-sign the MSI if a certificate path is provided
+if ($env:GLASS_CERT_PATH) {
+    Write-Host "Signing MSI..."
+    & signtool.exe sign `
+        -fd sha256 `
+        -f $env:GLASS_CERT_PATH `
+        -p $env:GLASS_CERT_PASSWORD `
+        -tr http://timestamp.digicert.com `
+        -td sha256 `
+        $OutPath
+    if ($LASTEXITCODE -ne 0) { throw "signtool failed with exit code $LASTEXITCODE" }
+} else {
+    Write-Host "GLASS_CERT_PATH not set — skipping code signing"
+}
 
 Write-Host "MSI ready: $OutPath"
