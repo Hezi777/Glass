@@ -1742,7 +1742,7 @@ fn load_embedded_fonts(cx: &App) {
                 continue;
             }
 
-            scope.spawn(async {
+            scope.spawn(async move {
                 match asset_source.load(font_path) {
                     Ok(Some(font_bytes)) => embedded_fonts.lock().push(font_bytes),
                     Ok(None) => log::warn!("Font asset not found: {font_path}"),

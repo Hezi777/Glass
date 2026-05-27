@@ -189,7 +189,7 @@ fn send_args_to_instance(args: &Args) -> anyhow::Result<()> {
                         CliResponse::Stderr { message } => log::error!("{message}"),
                         CliResponse::Exit { status } => {
                             exit_status.lock().replace(status);
-                            return Ok(());
+                            return Ok::<(), anyhow::Error>(());
                         }
                     }
                 }
@@ -200,7 +200,7 @@ fn send_args_to_instance(args: &Args) -> anyhow::Result<()> {
 
     write_message_to_instance_pipe(url.as_bytes())?;
     if let Some(sender) = sender {
-        sender.join().unwrap_or_else(|_| Ok(()))?;
+        sender.join().unwrap_or_else(|_| Ok::<(), anyhow::Error>(()))?;
     }
     if let Some(exit_status) = exit_status.lock().take() {
         std::process::exit(exit_status);

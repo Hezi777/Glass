@@ -196,7 +196,7 @@ $productWxs = Join-Path $workDir "Product.wxs"
     </DirectoryRef>
 
     <DirectoryRef Id="INSTALLFOLDER">
-      <Component Id="EnvironmentPath" Guid="*" Win64="yes">
+      <Component Id="EnvironmentPath" Guid="{A3B4C5D6-E7F8-4A1B-9C2D-3E4F5A6B7C8D}" Win64="yes">
         <Environment Id="PATH" Name="PATH" Value="[INSTALLFOLDER]" Permanent="no" Part="last" Action="set" System="yes" />
       </Component>
     </DirectoryRef>
